@@ -7,14 +7,19 @@ from step1_analyze_data import PretrainingDataset
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
-
+def denormalize_img(img, mean, std):
+    for t,m,s in zip(img, mean, std):
+        t.mul_(s).add_(m)
+        
+    img = torch.clamp(img, 0,1)
+    return img.permute((1,2,0))
 
 if __name__ == '__main__':
     device = torch.device('mps') if torch.backends.mps.is_available() else 'cpu'  
     print('using device ', device)
     
-   
     conv_vit_ae = ConvViTAutoencoder(
         image_size = 384,
         patch_size = 16,
@@ -32,8 +37,8 @@ if __name__ == '__main__':
     )
     conv_vit_ae = conv_vit_ae.to(device)
     
-    print('total number of parameters: ', sum(p.numel() for p in conv_vit_ae.parameters() if p.requires_grad))
     
+    conv_vit_ae.load_state_dict(torch.load('checkpoints/conv_vit_ae_1.pt'))
     
     mean= [0.6618, 0.5137, 0.6184]
     std=[0.1878, 0.2276, 0.1912]
@@ -42,23 +47,32 @@ if __name__ == '__main__':
         transforms.Normalize(mean, std)
     ])
     pretrain_dataset = PretrainingDataset(img_dir='data/CAM16_100cls_10mask/train/data/normal', transform=transform)
-    pretrain_loader = DataLoader(pretrain_dataset, batch_size=8, shuffle=False)
+    pretrain_loader = DataLoader(pretrain_dataset, batch_size=1, shuffle=False)
 
-    # sizes = []
-    
-    num_epochs = 100
-    optimizer = torch.optim.Adam(conv_vit_ae.parameters(), lr=0.001)
-    for e in range(1, num_epochs+1):
-        print( f"{f'starting epoch {e}':-^{50}}" )
-        for step, image_batch in tqdm(enumerate(pretrain_loader)):
-            image_batch = image_batch.to(device)
-            optimizer.zero_grad()
-            loss = conv_vit_ae(image_batch)
-            loss.backward()
-            optimizer.step()
-            
-            if step%10 == 0 :
-                print(f'loss after step {step+1}: ',loss.detach().item())
+
+    for step, image_batch in tqdm(enumerate(pretrain_loader)):
+        plt.figure()
+        image_batch = image_batch.to(device)
+
+        patches = conv_vit_ae.to_patch(image_batch)
+        _, patch_encoding = conv_vit_ae.encode(patches)
         
-        if e%5 == 0 or e == 1:
-            torch.save(conv_vit_ae.state_dict(), f'checkpoints/conv_vit_ae_{e}.pt')
+        r_image_batch = conv_vit_ae.to_img(conv_vit_ae.decode(patch_encoding))
+        
+        img = image_batch.detach().cpu().squeeze()
+        
+        r_img = r_image_batch.detach().cpu().squeeze()
+
+        plt.subplot(121)
+        plt.title('img')
+        plt.imshow(denormalize_img(img, mean, std))
+        plt.subplot(122)
+        plt.title('recon')
+        plt.imshow(denormalize_img(r_img, mean, std))
+        plt.savefig(f'output/{step}.png')
+        
+        if step > 3:
+            break
+        
+    
+    

@@ -3,9 +3,9 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from einops import repeat
+from einops import repeat, rearrange
 
-from .vit import Transformer
+from .vit import Transformer, pair
 
 class MAE(nn.Module):
     def __init__(
@@ -19,7 +19,7 @@ class MAE(nn.Module):
         decoder_dim_head = 64
     ):
         super().__init__()
-        assert masking_ratio > 0 and masking_ratio < 1, 'masking ratio must be kept between 0 and 1'
+        assert masking_ratio >= 0 and masking_ratio <= 1, 'masking ratio must be kept between 0 and 1'
         self.masking_ratio = masking_ratio
 
         # extract some hyperparameters and functions from encoder (vision transformer to be trained)
@@ -39,7 +39,7 @@ class MAE(nn.Module):
         self.decoder = Transformer(dim = decoder_dim, depth = decoder_depth, heads = decoder_heads, dim_head = decoder_dim_head, mlp_dim = decoder_dim * 4)
         self.decoder_pos_emb = nn.Embedding(num_patches, decoder_dim)
         self.to_pixels = nn.Linear(decoder_dim, pixel_values_per_patch)
-
+    
     def forward(self, img):
         device = img.device
 

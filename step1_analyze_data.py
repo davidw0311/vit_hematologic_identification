@@ -9,9 +9,7 @@ from PIL import Image
 from tqdm import tqdm
 
 transform = transforms.Compose([
-    # transforms.Resize((128, 128)),
     transforms.ToTensor(),
-    # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
 class PretrainingDataset(Dataset):
@@ -32,27 +30,28 @@ class PretrainingDataset(Dataset):
 
         return image
 
+if __name__ == "__main__":
+    # pretrain_dataset = PretrainingDataset(img_dir='data/WBC_100/data/Basophil', transform=transform)
+    pretrain_dataset = PretrainingDataset(img_dir='data/CAM16_100cls_10mask/train/data/normal', transform=transform)
+    pretrain_loader = DataLoader(pretrain_dataset, batch_size=1, shuffle=False)
 
-pretrain_dataset = PretrainingDataset(img_dir='data/CAM16_100cls_10mask/test/data/normal', transform=transform)
+    channels_sum, channels_squared_sum, num_batches = 0, 0, 0
 
-pretrain_loader = DataLoader(pretrain_dataset, batch_size=1, shuffle=False)
+    for img in tqdm(pretrain_loader):
+        channels_sum += torch.mean(img, dim=[0, 2, 3])
+        channels_squared_sum += torch.mean(img ** 2, dim=[0, 2, 3])
+        num_batches += 1
 
-sizes = []
-for i, image in tqdm(enumerate(pretrain_loader)):
-    image_size = image.shape
-    size = (image_size[1], image_size[2], image_size[3])
-    if size not in sizes:
-        sizes.append(size)
+    mean = channels_sum / num_batches
+    std = (channels_squared_sum / num_batches - mean ** 2) ** 0.5
+    
+    print("mean: ", mean)
+    print("std: ", std)
+
+
+
     
 
 
-        
-print(sizes)
-# for batch_idx, (data, target) in enumerate(train_loader):
-#     print(data.shape)
-#     print(target)
     
-#     if batch_idx >5:
-#         plt.imshow(data.squeeze().permute(1,2,0))
-#         plt.savefig('test.png')
-#         break
+
